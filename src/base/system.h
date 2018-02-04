@@ -1217,6 +1217,8 @@ int str_tolower(int c);
 */
 void gui_messagebox(const char *title, const char *message);
 
+int str_utf8_isspace(int code);
+
 const char *str_utf8_skip_whitespaces(const char *str);
 
 /*
