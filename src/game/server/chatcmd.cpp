@@ -140,7 +140,7 @@ bool CGameContext::ShowCommand(int ClientID, CPlayer* pPlayer, const char* pMess
 				{
 					int Mode = (int)pMessage[0] - (int)'0';
 					char aBuf[32];
-					str_format(aBuf, sizeof(aBuf), "Limit to %d on %d", Mode);
+					str_format(aBuf, sizeof(aBuf), "Restart round as %don%d", Mode, Mode);
 					char bBuf[32];
 					str_format(bBuf, sizeof(aBuf), "xonx %d", Mode);
 					StartVoteAs(aBuf, bBuf, "", pPlayer);
@@ -162,7 +162,7 @@ bool CGameContext::ShowCommand(int ClientID, CPlayer* pPlayer, const char* pMess
 			else
 			{
 				if(CanStartVote(pPlayer))
-					StartVoteAs("Reset specator slots", "reset", "", pPlayer);
+					StartVoteAs("No player limit", "reset", "", pPlayer);
 			}
 		}
 		return true;
