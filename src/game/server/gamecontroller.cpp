@@ -188,6 +188,11 @@ void IGameController::EndRound()
 	m_GameOverTick = Server()->Tick();
 	m_SuddenDeath = 0;
 	GameServer()->m_SpecMuted = false;
+
+	for(int i = 0; i < MAX_CLIENTS; i++)
+		if(GameServer()->m_apPlayers[i])
+			GameServer()->ShowStats(i);
+
 	SaveStats();
 }
 

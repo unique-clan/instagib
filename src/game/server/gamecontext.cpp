@@ -1649,6 +1649,27 @@ void CGameContext::DestroyLolText(int TextID)
 	CLoltext::Destroy(&m_World, TextID);
 }
 
+void CGameContext::ShowStats(int ClientID, int ReceiverID)
+{
+	char aBuf[32] = { 0 };
+	CPlayer *pP = m_apPlayers[ClientID];
+	if(ReceiverID != -1)
+	{
+		pP = m_apPlayers[ReceiverID];
+		str_format(aBuf, sizeof(aBuf), "(%s) ", Server()->ClientName(ReceiverID));
+	}
+
+	char aaBuf[5][128];
+	str_format(aaBuf[0], sizeof(aaBuf[0]), "--- Statistics %s---", aBuf);
+	str_format(aaBuf[1], sizeof(aaBuf[1]), "Total Shots: %d", pP->m_Stats.m_TotalShots);
+	str_format(aaBuf[2], sizeof(aaBuf[2]), "Kills: %d", pP->m_Stats.m_Kills);
+	str_format(aaBuf[3], sizeof(aaBuf[3]), "Deaths: %d", pP->m_Stats.m_Deaths);
+	str_format(aaBuf[4], sizeof(aaBuf[4]), "Ratio: %.2f", (pP->m_Stats.m_Deaths > 0) ? ((float) pP->m_Stats.m_Kills / (float) pP->m_Stats.m_Deaths) : 0);
+
+	for (int i = 0; i < 5; i++)
+		SendChatTarget(ClientID, aaBuf[i]);
+}
+
 bool CGameContext::CheckForCapslock(const char *pStr)
 {
 	int Lower = 0, Upper = 0, None = 0;

@@ -123,6 +123,8 @@ public:
 	int CreateLolText(CEntity *pParent, const char *pText);
 	void DestroyLolText(int TextID);
 
+	void ShowStats(int ClientID, int ReceiverID=-1);
+
 	int m_VoteCreator;
 	int64 m_VoteCloseTime;
 	bool m_VoteUpdate;
