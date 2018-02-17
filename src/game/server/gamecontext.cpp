@@ -727,7 +727,7 @@ void CGameContext::OnMessage(int MsgID, CUnpacker *pUnpacker, int ClientID)
 				return;
 			}
 			//mute the player if he's spamming
-			else if(g_Config.m_SvMuteDuration && ((pPlayer->m_ChatTicks += g_Config.m_SvChatValue) > g_Config.m_SvChatThreshold))
+			else if(g_Config.m_SvMuteDuration && ((pPlayer->m_ChatTicks += g_Config.m_SvChatValue) > g_Config.m_SvChatThreshold) && Team == CGameContext::CHAT_ALL)
 			{
 				m_Mute.AddMute(ClientID, g_Config.m_SvMuteDuration);
 				pPlayer->m_ChatTicks = 0;
