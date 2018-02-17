@@ -72,6 +72,8 @@ class CGameContext : public IGameServer
 	static void ConMuteSpec(IConsole::IResult *pResult, void *pUserData);
 	static void ConStop(IConsole::IResult *pResult, void *pUserData);
 	static void ConGo(IConsole::IResult *pResult, void *pUserData);
+	static void ConXonX(IConsole::IResult *pResult, void *pUserData);
+	static void ConReset(IConsole::IResult *pResult, void *pUserData);
 	static void ConSetName(IConsole::IResult *pResult, void *pUserData);
 	static void ConSetClan(IConsole::IResult *pResult, void *pUserData);
 	static void ConKill(IConsole::IResult *pResult, void *pUserData);
@@ -109,7 +111,9 @@ public:
 	int m_LockTeams;
 
 	// voting
+	bool CanStartVote(CPlayer *pPlayer);
 	void StartVote(const char *pDesc, const char *pCommand, const char *pReason);
+	void StartVoteAs(const char *pDesc, const char *pCommand, const char *pReason, CPlayer *pPlayer);
 	void EndVote();
 	void SendVoteSet(int ClientID);
 	void SendVoteStatus(int ClientID, int Total, int Yes, int No);

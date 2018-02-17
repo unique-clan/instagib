@@ -292,6 +292,36 @@ void CGameContext::SendBroadcast(const char *pText, int ClientID)
 }
 
 //
+bool CGameContext::CanStartVote(CPlayer *pPlayer)
+{
+	if(g_Config.m_SvSpamprotection && pPlayer->m_LastVoteTry && pPlayer->m_LastVoteTry+Server()->TickSpeed()*3 > Server()->Tick())
+		return false;
+
+	int64 Now = Server()->Tick();
+	pPlayer->m_LastVoteTry = Now;
+	if(pPlayer->GetTeam() == TEAM_SPECTATORS)
+	{
+		SendChatTarget(pPlayer->GetCID(), "Spectators aren't allowed to start a vote.");
+		return false;
+	}
+
+	if(m_VoteCloseTime)
+	{
+		SendChatTarget(pPlayer->GetCID(), "Wait for current vote to end before calling a new one.");
+		return false;
+	}
+
+	int Timeleft = pPlayer->m_LastVoteCall + Server()->TickSpeed()*60 - Now;
+	if(pPlayer->m_LastVoteCall && Timeleft > 0)
+	{
+		char aChatmsg[512] = {0};
+		str_format(aChatmsg, sizeof(aChatmsg), "You must wait %d seconds before making another vote", (Timeleft/Server()->TickSpeed())+1);
+		SendChatTarget(pPlayer->GetCID(), aChatmsg);
+		return false;
+	}
+	return true;
+}
+
 void CGameContext::StartVote(const char *pDesc, const char *pCommand, const char *pReason)
 {
 	// check if a vote is already running
@@ -318,6 +348,14 @@ void CGameContext::StartVote(const char *pDesc, const char *pCommand, const char
 	m_VoteUpdate = true;
 }
 
+void CGameContext::StartVoteAs(const char *pDesc, const char *pCommand, const char *pReason, CPlayer *pPlayer)
+{
+	StartVote(pDesc, pCommand, pReason);
+	pPlayer->m_Vote = 1;
+	pPlayer->m_VotePos = m_VotePos = 1;
+	m_VoteCreator = pPlayer->GetCID();
+	pPlayer->m_LastVoteCall = Server()->Tick();
+}
 
 void CGameContext::EndVote()
 {
@@ -752,31 +790,8 @@ void CGameContext::OnMessage(int MsgID, CUnpacker *pUnpacker, int ClientID)
 		}
 		else if(MsgID == NETMSGTYPE_CL_CALLVOTE)
 		{
-			if(g_Config.m_SvSpamprotection && pPlayer->m_LastVoteTry && pPlayer->m_LastVoteTry+Server()->TickSpeed()*3 > Server()->Tick())
+			if(!CanStartVote(pPlayer))
 				return;
-
-			int64 Now = Server()->Tick();
-			pPlayer->m_LastVoteTry = Now;
-			if(pPlayer->GetTeam() == TEAM_SPECTATORS)
-			{
-				SendChatTarget(ClientID, "Spectators aren't allowed to start a vote.");
-				return;
-			}
-
-			if(m_VoteCloseTime)
-			{
-				SendChatTarget(ClientID, "Wait for current vote to end before calling a new one.");
-				return;
-			}
-
-			int Timeleft = pPlayer->m_LastVoteCall + Server()->TickSpeed()*60 - Now;
-			if(pPlayer->m_LastVoteCall && Timeleft > 0)
-			{
-				char aChatmsg[512] = {0};
-				str_format(aChatmsg, sizeof(aChatmsg), "You must wait %d seconds before making another vote", (Timeleft/Server()->TickSpeed())+1);
-				SendChatTarget(ClientID, aChatmsg);
-				return;
-			}
 
 			char aChatmsg[512] = {0};
 			char aDesc[VOTE_DESC_LENGTH] = {0};
@@ -925,11 +940,7 @@ void CGameContext::OnMessage(int MsgID, CUnpacker *pUnpacker, int ClientID)
 			if(aCmd[0])
 			{
 				SendChat(-1, CGameContext::CHAT_ALL, aChatmsg);
-				StartVote(aDesc, aCmd, pReason);
-				pPlayer->m_Vote = 1;
-				pPlayer->m_VotePos = m_VotePos = 1;
-				m_VoteCreator = ClientID;
-				pPlayer->m_LastVoteCall = Now;
+				StartVoteAs(aDesc, aCmd, pReason, pPlayer);
 			}
 		}
 		else if(MsgID == NETMSGTYPE_CL_VOTE)
@@ -1274,10 +1285,13 @@ void CGameContext::ConChangeMap(IConsole::IResult *pResult, void *pUserData)
 void CGameContext::ConRestart(IConsole::IResult *pResult, void *pUserData)
 {
 	CGameContext *pSelf = (CGameContext *)pUserData;
-	if(pResult->NumArguments())
-		pSelf->m_pController->DoWarmup(pResult->GetInteger(0));
+	if(pSelf->m_pController->IsWarmup())
+	{
+		pSelf->m_pController->DoWarmup(0);
+		pSelf->m_pController->m_FakeWarmup = 0;
+	}
 	else
-		pSelf->m_pController->StartRound();
+		pSelf->m_pController->DoWarmup(g_Config.m_SvGoTime);
 }
 
 void CGameContext::ConBroadcast(IConsole::IResult *pResult, void *pUserData)
@@ -1727,7 +1741,29 @@ void CGameContext::ConStop(IConsole::IResult *pResult, void *pUserData)
 void CGameContext::ConGo(IConsole::IResult *pResult, void *pUserData)
 {
 	CGameContext *pSelf = (CGameContext *)pUserData;
-	pSelf->m_pController->m_FakeWarmup = (pResult->NumArguments() == 1) ? pSelf->Server()->TickSpeed() * pResult->GetInteger(1) : pSelf->Server()->TickSpeed() * g_Config.m_SvGoTime;
+	pSelf->m_pController->m_FakeWarmup = pSelf->Server()->TickSpeed() * g_Config.m_SvGoTime;
+}
+
+void CGameContext::ConXonX(IConsole::IResult *pResult, void *pUserData)
+{
+	CGameContext *pSelf = (CGameContext *)pUserData;
+	int Mode = pResult->GetInteger(0);
+	g_Config.m_SvSpectatorSlots = MAX_CLIENTS - 2*Mode;
+	pSelf->m_pController->DoWarmup(g_Config.m_SvWarTime);
+	char aBuf[128];
+
+	str_format(aBuf, sizeof(aBuf), "Upcoming %don%d! Please stay on spectator", Mode, Mode);
+	pSelf->SendBroadcast(aBuf, -1);
+
+	str_format(aBuf, sizeof(aBuf), "The %don%d will start in %d seconds!", Mode, Mode, g_Config.m_SvWarTime);
+	pSelf->SendChat(-1, CHAT_ALL, aBuf);
+}
+
+void CGameContext::ConReset(IConsole::IResult *pResult, void *pUserData)
+{
+	CGameContext *pSelf = (CGameContext *)pUserData;
+	g_Config.m_SvSpectatorSlots = 0;
+	pSelf->SendChat(-1, CHAT_ALL, "Reset spectator slots");
 }
 
 void CGameContext::ConSetName(IConsole::IResult *pResult, void *pUserData)
@@ -1873,7 +1909,7 @@ void CGameContext::OnConsoleInit()
 
 	Console()->Register("pause", "", CFGFLAG_SERVER, ConPause, this, "Pause/unpause game");
 	Console()->Register("change_map", "?r", CFGFLAG_SERVER|CFGFLAG_STORE, ConChangeMap, this, "Change map");
-	Console()->Register("restart", "?i", CFGFLAG_SERVER|CFGFLAG_STORE, ConRestart, this, "Restart in x seconds (0 = abort)");
+	Console()->Register("restart", "", CFGFLAG_SERVER|CFGFLAG_STORE, ConRestart, this, "Restart in x seconds (0 = abort)");
 	Console()->Register("broadcast", "r", CFGFLAG_SERVER, ConBroadcast, this, "Broadcast message");
 	Console()->Register("say", "r", CFGFLAG_SERVER, ConSay, this, "Say in chat");
 	Console()->Register("set_team", "ii?i", CFGFLAG_SERVER, ConSetTeam, this, "Set team of player to team");
@@ -1895,7 +1931,9 @@ void CGameContext::OnConsoleInit()
 	Console()->Register("melt", "i", CFGFLAG_SERVER, ConUnFreeze, this, "Melt a player (same effect like unfreeze)");
 	Console()->Register("mute_spec", "?i", CFGFLAG_SERVER, ConMuteSpec, this, "All messages written in spectators will be redirect to teamchat for this round");
 	Console()->Register("stop", "", CFGFLAG_SERVER, ConStop, this, "Pause the game");
-	Console()->Register("go", "?i", CFGFLAG_SERVER, ConGo, this, "Continue the game");
+	Console()->Register("go", "", CFGFLAG_SERVER, ConGo, this, "Continue the game");
+	Console()->Register("xonx", "i", CFGFLAG_SERVER, ConXonX, this, "Limit amount of active players");
+	Console()->Register("reset", "", CFGFLAG_SERVER, ConReset, this, "Reset amount of active players");
 	Console()->Register("set_name", "ir", CFGFLAG_SERVER, ConSetName, this, "Set the name of a player");
 	Console()->Register("set_clan", "ir", CFGFLAG_SERVER, ConSetClan, this, "Set the clan of a player");
 	Console()->Register("kill", "i", CFGFLAG_SERVER, ConKill, this, "Kill a player");

@@ -97,31 +97,27 @@ bool CGameContext::ShowCommand(int ClientID, CPlayer* pPlayer, const char* pMess
 		return true;
 	}
 	else if(StrLeftComp(pMessage, "go"))
+	{
+		if(pPlayer->GetTeam() != TEAM_SPECTATORS)
 		{
-			if(pPlayer->GetTeam() != TEAM_SPECTATORS)
+			if(g_Config.m_SvStopGoFeature)
 			{
-				if(g_Config.m_SvStopGoFeature)
-				{
-					m_pController->m_FakeWarmup = Server()->TickSpeed() * g_Config.m_SvGoTime;
-				}
-				else
-					SendChatTarget(ClientID, "This feature is not available at the moment.");
+				if(CanStartVote(pPlayer))
+					StartVoteAs("Unpause game", "go", "", pPlayer);
 			}
-			return true;
+			else
+				SendChatTarget(ClientID, "This feature is not available at the moment.");
 		}
+		return true;
+	}
 	else if(StrLeftComp(pMessage, "restart"))
 	{
 		if(pPlayer->GetTeam() != TEAM_SPECTATORS)
 		{
 			if(g_Config.m_SvStopGoFeature)
 			{
-				if(m_pController->IsWarmup())
-				{
-					m_pController->DoWarmup(0);
-					m_pController->m_FakeWarmup = 0;
-				}
-				else
-					m_pController->DoWarmup(g_Config.m_SvGoTime);
+				if(CanStartVote(pPlayer))
+					StartVoteAs("Restart round", "restart", "", pPlayer);
 			}
 			else
 				SendChatTarget(ClientID, "This feature is not available at the moment.");
@@ -140,16 +136,15 @@ bool CGameContext::ShowCommand(int ClientID, CPlayer* pPlayer, const char* pMess
 			}
 			else
 			{
-				int Mode = (int)pMessage[0] - (int)'0';
-				g_Config.m_SvSpectatorSlots = MAX_CLIENTS - 2*Mode;
-				m_pController->DoWarmup(g_Config.m_SvWarTime);
-				char aBuf[128];
-
-				str_format(aBuf, sizeof(aBuf), "Upcoming %don%d! Please stay on spectator", Mode, Mode);
-				SendBroadcast(aBuf, -1);
-
-				str_format(aBuf, sizeof(aBuf), "The %don%d will start in %d seconds!", Mode, Mode, g_Config.m_SvWarTime);
-				SendChat(-1, CHAT_ALL, aBuf);
+				if(CanStartVote(pPlayer))
+				{
+					int Mode = (int)pMessage[0] - (int)'0';
+					char aBuf[32];
+					str_format(aBuf, sizeof(aBuf), "Limit to %d on %d", Mode);
+					char bBuf[32];
+					str_format(bBuf, sizeof(aBuf), "xonx %d", Mode);
+					StartVoteAs(aBuf, bBuf, "", pPlayer);
+				}
 			}
 		}
 
@@ -166,8 +161,8 @@ bool CGameContext::ShowCommand(int ClientID, CPlayer* pPlayer, const char* pMess
 			}
 			else
 			{
-				g_Config.m_SvSpectatorSlots = 0;
-				SendChat(-1, CHAT_ALL, "Reset spectator slots");
+				if(CanStartVote(pPlayer))
+					StartVoteAs("Reset specator slots", "reset", "", pPlayer);
 			}
 		}
 		return true;
